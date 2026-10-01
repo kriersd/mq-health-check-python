@@ -1,0 +1,36 @@
+# F5 BIG-IP (tmsh) - health monitor for mq-health-agent
+# Adjust pool name, ports and interval to the customer's standards.
+
+# HTTP monitor against the agent on each pool member (port 9444, not the MQ port).
+create ltm monitor http mq_health_agent {
+    defaults-from http
+    destination *:9444
+    interval 5
+    timeout 16
+    send "GET /health HTTP/1.1\r\nHost: mq-health\r\nConnection: Close\r\n\r\n"
+    recv "HTTP/1\.[01] 200"
+}
+
+# If the agent serves HTTPS (http.tls in config.yaml), use this instead:
+# create ltm monitor https mq_health_agent_tls {
+#     defaults-from https
+#     destination *:9444
+#     interval 5
+#     timeout 16
+#     send "GET /health HTTP/1.1\r\nHost: mq-health\r\nConnection: Close\r\n\r\n"
+#     recv "HTTP/1\.[01] 200"
+# }
+
+# Both monitors must pass (availability = All); reset clients on a down member;
+# ramp traffic back gradually after recovery.
+modify ltm pool mq_pool {
+    monitor "tcp_half_open and mq_health_agent"
+    service-down-action reset
+    slow-ramp-time 60
+}
+
+# TCP idle timeout above the MQ heartbeat (HBINT ~60s on the SVRCONN channel).
+create ltm profile tcp mq_tcp {
+    defaults-from tcp
+    idle-timeout 180
+}

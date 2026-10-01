@@ -1,0 +1,94 @@
+# mq-health-agent configuration - one agent per MQ host / queue manager.
+# Copy to /etc/mq-health-agent/config.yaml and adjust.
+# Secrets come from environment variables (see mq-health-agent.service), not this file.
+
+queue_manager: QM1
+# qmgr_data_dir: /var/mqm/qmgrs/QM1     # default: /var/mqm/qmgrs/<QM name, '.' -> '!'>
+
+interval_seconds: 10        # how often checks run; /health serves the cached result
+check_timeout_seconds: 8    # a check slower than this counts as FAIL (hung queue manager)
+
+http:
+  bind: 0.0.0.0
+  port: 9444
+  allow_from:               # F5 self IPs / floating IPs; empty list = allow all
+    - 10.10.0.0/24
+  # tls:                    # optional: serve /health over HTTPS (use an F5 HTTPS monitor)
+  #   cert: /etc/mq-health-agent/tls/cert.pem
+  #   key:  /etc/mq-health-agent/tls/key.pem
+
+rest:
+  url: https://localhost:9443
+  api_version: v2
+  user: mqhealth            # needs MQWebAdminRO (for DISPLAY) and MQWebUser (for put_get)
+  password_env: MQHEALTH_REST_PASSWORD
+  ca_bundle: /etc/mq-health-agent/mqweb-ca.pem   # CA that signed the mqweb certificate
+  timeout_seconds: 5
+
+# Every check accepts:  enabled: true|false   and   scope: member|pool
+#   member -> a FAIL returns 503 and the F5 takes this member out of the pool
+#   pool   -> a FAIL returns 200 DEGRADED and is logged for alerting only
+checks:
+  qmgr_status:
+    enabled: true
+
+  listener:
+    port: 1414
+
+  svrconn_channel:
+    channels: [APP.SVRCONN]
+    warn_pct: 85            # WARN when instances reach this % of MAXINST
+
+  max_channels:             # compares active channels with qm.ini MaxChannels/MaxActiveChannels
+    warn_pct: 85
+    fail_pct: 98
+    # qm_ini: /var/mqm/qmgrs/QM1/qm.ini
+
+  chlauth:                  # DISPLAY CHLAUTH ... MATCH(RUNCHECK) simulates these connections
+    probes:
+      - channel: APP.SVRCONN
+        address: 10.20.30.40
+        clntuser: appuser
+      # - channel: APP.SVRCONN
+      #   address: 10.20.30.41
+      #   sslpeer: "CN=orders-app,O=Example"
+
+  log_usage:
+    warn_pct: 80
+    fail_pct: 95
+
+  put_get:                  # persistent put + get through the messaging REST API
+    queue: HEALTH.CHECK.Q
+    expiry_ms: 60000
+
+  app_queues:
+    scope: pool             # a full app queue usually affects every member - alert, don't fail over
+    queues: [APP.REQUEST.Q]
+    warn_pct: 80
+
+  disk_space:
+    paths: [/var/mqm/qmgrs, /var/mqm/log]
+    warn_pct: 85
+    fail_pct: 95
+
+  tls_cert:
+    kdb: /var/mqm/qmgrs/QM1/ssl/key.kdb
+    label: ibmwebspheremqqm1
+    # pem: /var/mqm/qmgrs/QM1/ssl/qm1-cert.pem   # use instead of kdb/label for PEM keystores
+    warn_days: 30
+
+  ldap:
+    enabled: false
+    scope: pool
+    servers: [ldap1.example.com:636, ldap2.example.com:636]
+
+  client_connect:           # requires pymqi + MQ client libraries on this host
+    enabled: true
+    host: 127.0.0.1         # this host's listener, NOT the F5 VIP
+    port: 1414
+    channel: APP.SVRCONN
+    cipher: ANY_TLS13_OR_HIGHER
+    key_repository: /etc/mq-health-agent/client/key   # kdb path without extension
+    user: mqhealth
+    password_env: MQHEALTH_CLIENT_PASSWORD
+    queue: HEALTH.CHECK.Q   # optional put/get over the client connection

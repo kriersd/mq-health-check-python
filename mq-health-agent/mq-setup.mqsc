@@ -1,0 +1,15 @@
+* MQ objects and authorities for mq-health-agent.  Run: runmqsc QM1 < mq-setup.mqsc
+* 'mqhealth' must exist as an OS or LDAP user known to the queue manager.
+
+* Dedicated health queue: persistent by default, small, never used by applications.
+DEFINE QLOCAL(HEALTH.CHECK.Q) MAXDEPTH(1000) DEFPSIST(YES) DESCR('mq-health-agent put/get probe') REPLACE
+
+SET AUTHREC OBJTYPE(QMGR) PRINCIPAL('mqhealth') AUTHADD(CONNECT, INQ, DSP)
+SET AUTHREC PROFILE(HEALTH.CHECK.Q) OBJTYPE(QUEUE) PRINCIPAL('mqhealth') AUTHADD(PUT, GET, INQ, BROWSE)
+
+* client_connect connects from this host's own address. Allow it on the app channel
+* and map it to the health user (adjust to the customer's CHLAUTH design).
+SET CHLAUTH('APP.SVRCONN') TYPE(USERMAP) CLNTUSER('mqhealth') USERSRC(MAP) MCAUSER('mqhealth') ADDRESS('127.0.0.1') DESCR('mq-health-agent') ACTION(REPLACE)
+
+* Heartbeat below the F5 TCP idle timeout (180s).
+ALTER CHANNEL('APP.SVRCONN') CHLTYPE(SVRCONN) HBINT(60)

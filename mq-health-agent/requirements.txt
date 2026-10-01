@@ -1,0 +1,4 @@
+requests>=2.28
+PyYAML>=6.0
+# Optional - only for the client_connect check. Needs the IBM MQ client (or server) libraries installed.
+pymqi>=1.12
