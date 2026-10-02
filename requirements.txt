@@ -1,0 +1,20 @@
+# IBM MQ Health Check — Python dependencies
+# All runtime dependencies. pymqi requires the IBM MQ client libraries
+# to be installed on the host (see README for installation notes).
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# For systems where the IBM MQ client libraries are installed:
+#   pip install -r requirements.txt pymqi
+
+# Core dependencies (stdlib only — no external packages required for the
+# basic health server to run)
+# The only optional runtime dependency is pymqi for real MQ client checks.
+
+# Optional: IBM MQ client Python binding
+# pymqi>=1.12.4
+
+# Test / development dependencies
+# (separate install so production images stay lean)
+# pytest>=7.0

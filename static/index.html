@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<!--
+    Filename: static/index.html
+    Purpose: Production-grade HTML dashboard rendering the 12 IBM MQ Subsystem Health Checks.
+    Sensitive-Data Handling: None. Communication is local-only via fetch requests.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IBM MQ High-Availability Health Monitor</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f6;
+            --surface-color: #ffffff;
+            --border-color: #dde1e5;
+            --text-color: #161616;
+            --text-muted: #525252;
+            --accent-color: #0f62fe;
+            --accent-hover: #0353e9;
+            --status-up: #198754;
+            --status-degraded: #ffb000;
+            --status-down: #da1e28;
+            --status-up-bg: #def8e9;
+            --status-degraded-bg: #fef3d6;
+            --status-down-bg: #ffd7d9;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-stack);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.5;
+            padding: 40px 20px;
+        }
+
+        .container { max-width: 860px; margin: 0 auto; }
+
+        header {
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .brand h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+
+        .env-badge {
+            background-color: #161616;
+            color: #ffffff;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+        }
+
+        .status-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+        }
+
+        .status-title { font-size: 18px; font-weight: 600; }
+
+        .badge {
+            font-size: 13px;
+            font-weight: 700;
+            padding: 6px 16px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-unknown { background-color: #e0e0e0; color: #4a5568; }
+        .badge-up      { background-color: var(--status-up-bg);       color: var(--status-up);       border: 1px solid #c2eccd; }
+        .badge-degraded{ background-color: var(--status-degraded-bg); color: #8c5b00;                border: 1px solid #fce7b3; }
+        .badge-down    { background-color: var(--status-down-bg);     color: var(--status-down);     border: 1px solid #ffb3b8; }
+
+        .overview-details {
+            background-color: #f4f4f6;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 25px;
+            font-size: 14px;
+        }
+
+        .overview-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .overview-msg { font-family: monospace; word-break: break-word; font-weight: 500; }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .check-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 30px; }
+
+        .check-item {
+            background-color: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 12px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.1s ease;
+        }
+
+        .check-item:hover { transform: translateX(2px); }
+
+        .check-info { flex-grow: 1; padding-right: 15px; }
+
+        .check-name {
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: capitalize;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .check-sev {
+            font-size: 10px;
+            font-weight: 500;
+            color: #767676;
+            background-color: #e0e0e0;
+            padding: 1px 6px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .check-sev.member { background-color: #dde1e5; color: #393939; }
+        .check-sev.pool   { background-color: #e8daff; color: #491d8b; }
+
+        .check-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; font-family: monospace; }
+
+        .check-status {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .status-UP       { background-color: var(--status-up-bg);       color: var(--status-up);   }
+        .status-DEGRADED { background-color: var(--status-degraded-bg); color: #8c5b00;             }
+        .status-DOWN     { background-color: var(--status-down-bg);     color: var(--status-down);  }
+        .status-SKIP     { background-color: #e0e0e0;                   color: #525252;             }
+
+        .actions { display: flex; justify-content: space-between; align-items: center; }
+
+        button {
+            background-color: var(--accent-color);
+            color: #ffffff;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        button:hover    { background-color: var(--accent-hover); }
+        button:active   { transform: scale(0.98); }
+        button:disabled { background-color: #8a8a8a; cursor: not-allowed; }
+
+        .error-message {
+            display: none;
+            background-color: #ffd7d9;
+            border: 1px solid #ffb3b8;
+            color: var(--status-down);
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            margin-top: 15px;
+        }
+
+        .auto-refresh-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div class="brand">
+            <h1 id="app-name">IBM MQ HA Monitor</h1>
+        </div>
+        <div class="env-badge" id="app-env">Loading...</div>
+    </header>
+
+    <main>
+        <div class="card">
+            <div class="status-header">
+                <span class="status-title">Load Balancer Visibility State</span>
+                <span id="status-badge" class="badge badge-unknown">UNKNOWN</span>
+            </div>
+
+            <div class="overview-details">
+                <div class="overview-meta">
+                    <div>Queue Manager: <strong id="qm-value">-</strong></div>
+                    <div>Last Sync: <strong id="time-value">-</strong></div>
+                </div>
+                <div class="overview-msg" id="details-value">Checking subsystem metrics...</div>
+            </div>
+
+            <h2 class="section-title">Subsystem Health Breakdown (12 Coverage Rows)</h2>
+            <div class="check-grid" id="check-container">
+                <!-- Check items are dynamically loaded here -->
+            </div>
+
+            <div class="actions">
+                <div class="auto-refresh-bar">
+                    <input type="checkbox" id="auto-refresh" checked>
+                    <label for="auto-refresh">Auto-refresh every 15 s</label>
+                    <span style="margin-left:12px; font-size:11px; color:var(--text-muted);">
+                        F5 Pool logic: pool failure = 200 DEGRADED · member failure = 503 DOWN
+                    </span>
+                </div>
+                <button id="check-btn">Check Status</button>
+            </div>
+
+            <div id="error-alert" class="error-message"></div>
+        </div>
+    </main>
+
+    <footer>
+        Exposing Enterprise IBM MQ High-Availability Orchestration &mdash; Python Edition
+    </footer>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const appNameEl      = document.getElementById("app-name");
+        const appEnvEl       = document.getElementById("app-env");
+        const statusBadge    = document.getElementById("status-badge");
+        const qmValue        = document.getElementById("qm-value");
+        const timeValue      = document.getElementById("time-value");
+        const detailsValue   = document.getElementById("details-value");
+        const checkBtn       = document.getElementById("check-btn");
+        const checkContainer = document.getElementById("check-container");
+        const errorAlert     = document.getElementById("error-alert");
+        const autoRefresh    = document.getElementById("auto-refresh");
+
+        let refreshTimer = null;
+
+        async function fetchAppInfo() {
+            try {
+                const response = await fetch("/api/info");
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.name) appNameEl.textContent = data.name;
+                    if (data.env)  appEnvEl.textContent  = data.env;
+                }
+            } catch (err) {
+                console.warn("Could not fetch application metadata", err);
+                appEnvEl.textContent = "Offline";
+            }
+        }
+
+        async function runHealthCheck() {
+            checkBtn.disabled   = true;
+            checkBtn.textContent = "Querying Subsystems...";
+            errorAlert.style.display = "none";
+
+            try {
+                const response = await fetch("/health/mq");
+                const data     = await response.json();
+                updateUI(data);
+            } catch (err) {
+                console.error("Health check fetch failed:", err);
+                showFetchError(err.message || "Network request failed. Ensure server is running.");
+            } finally {
+                checkBtn.disabled    = false;
+                checkBtn.textContent = "Check Status";
+            }
+        }
+
+        function updateUI(data) {
+            const status = (data.status || "UNKNOWN").toUpperCase();
+
+            statusBadge.className = "badge";
+            if      (status === "UP")       statusBadge.classList.add("badge-up");
+            else if (status === "DEGRADED") statusBadge.classList.add("badge-degraded");
+            else                            statusBadge.classList.add("badge-down");
+            statusBadge.textContent = status;
+
+            qmValue.textContent = data.queueManager || "Unknown QM";
+
+            if (data.timestamp) {
+                try {
+                    timeValue.textContent = new Date(data.timestamp).toLocaleString();
+                } catch {
+                    timeValue.textContent = data.timestamp;
+                }
+            } else {
+                timeValue.textContent = "-";
+            }
+
+            detailsValue.textContent = data.details || "No details provided.";
+
+            checkContainer.innerHTML = "";
+            const checks = data.checks || [];
+
+            if (checks.length === 0) {
+                checkContainer.innerHTML = "<div style='font-size:13px;color:var(--text-muted);'>No checks returned from service.</div>";
+                return;
+            }
+
+            checks.forEach(check => {
+                const item = document.createElement("div");
+                item.className = "check-item";
+
+                const info = document.createElement("div");
+                info.className = "check-info";
+
+                const nameRow = document.createElement("div");
+                nameRow.className = "check-name";
+
+                const nameSpan = document.createElement("span");
+                nameSpan.textContent = check.name.replace(/_/g, " ");
+                nameRow.appendChild(nameSpan);
+
+                const sevBadge = document.createElement("span");
+                const sev = (check.severity || "pool_failure");
+                const sevShort = sev === "member_failure" ? "member" : "pool";
+                sevBadge.className   = `check-sev ${sevShort}`;
+                sevBadge.textContent = sev.replace(/_/g, " ");
+                nameRow.appendChild(sevBadge);
+
+                const desc = document.createElement("div");
+                desc.className   = "check-desc";
+                desc.textContent = check.details || "";
+
+                info.appendChild(nameRow);
+                info.appendChild(desc);
+
+                const badge = document.createElement("div");
+                const cs    = (check.status || "SKIP").toUpperCase();
+                badge.className   = `check-status status-${cs}`;
+                badge.textContent = cs;
+
+                item.appendChild(info);
+                item.appendChild(badge);
+                checkContainer.appendChild(item);
+            });
+        }
+
+        function showFetchError(message) {
+            statusBadge.className   = "badge badge-down";
+            statusBadge.textContent = "DOWN";
+            qmValue.textContent     = "-";
+            timeValue.textContent   = new Date().toLocaleString();
+            detailsValue.textContent = "Failed to communicate with REST health API endpoint.";
+            errorAlert.textContent   = "HTTP Connection Error: " + message;
+            errorAlert.style.display = "block";
+        }
+
+        function scheduleRefresh() {
+            clearTimeout(refreshTimer);
+            if (autoRefresh.checked) {
+                refreshTimer = setTimeout(() => {
+                    runHealthCheck().then(scheduleRefresh);
+                }, 15000);
+            }
+        }
+
+        checkBtn.addEventListener("click", () => {
+            runHealthCheck().then(scheduleRefresh);
+        });
+
+        autoRefresh.addEventListener("change", scheduleRefresh);
+
+        // Initial load
+        fetchAppInfo();
+        runHealthCheck().then(scheduleRefresh);
+    });
+</script>
+</body>
+</html>

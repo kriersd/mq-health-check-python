@@ -1,0 +1,46 @@
+# ==============================================================================
+# Filename: mq-health-check.service
+# Purpose: Systemd service unit for the IBM MQ Health Check (Python).
+# Install: sudo cp mq-health-check.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now mq-health-check
+# ==============================================================================
+
+[Unit]
+Description=IBM MQ High-Availability Health Check & Dashboard (Python)
+After=network-online.target syslog.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mqm
+Group=mqm
+
+# Deploy the app to /opt/mq-health-check/ and place .env there.
+# The script resolves .env relative to its own location so WorkingDirectory
+# does not affect config loading.
+WorkingDirectory=/opt/mq-health-check
+
+# LD_LIBRARY_PATH is required when pymqi (MQ client libraries) is installed.
+Environment=LD_LIBRARY_PATH=/opt/mqm/lib64
+
+# Execute the health check application
+ExecStart=/usr/bin/python3 /opt/mq-health-check/mq_health_check.py
+
+# Restart within 5 seconds if the process exits or crashes.
+# If the agent dies the F5 will see no response on /health/mq and mark the
+# member down — so fast restart is critical.
+Restart=always
+RestartSec=5s
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mq-health-check
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=full
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

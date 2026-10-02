@@ -1,0 +1,20 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Secrets / local config overrides — never commit these
+.env
+**/secrets.env
+
+# macOS metadata
+.DS_Store
+
+# Browser automation artefacts from development sessions
+.playwright-mcp/
+
+# Screenshots captured during development
+static/*.png
+static/*.jpg
+static/*.jpeg
+static/*.webp
